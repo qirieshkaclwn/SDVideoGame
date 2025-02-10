@@ -1,2 +1,1 @@
-hello its my game
-donvload["https://github.com/qirieshkaclwn/SDVideoGame/releases/tag/pre-release"]
+[hello, it's my game download](https://github.com/qirieshkaclwn/SDVideoGame/releases/tag/pre-release)
