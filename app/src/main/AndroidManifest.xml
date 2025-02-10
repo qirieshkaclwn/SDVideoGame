@@ -5,7 +5,7 @@
     <application
         android:allowBackup="true"
         android:icon="@drawable/ico"
-        android:label="SDVG"
+        android:label="SDVideoGame"
         android:theme="@style/Theme.G2">
 
         <!-- Убедитесь, что MainActivity указана как главная активность -->
