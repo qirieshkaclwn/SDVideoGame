@@ -31,8 +31,8 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
     private var lastFrameTime = System.nanoTime()
     private var fps = 0
 
-    // Список следов (позиция x, y, прозрачность)
-    private val trail = mutableListOf<Triple<Float, Float, Int>>()
+    // След из точек
+    private val trail = mutableListOf<Pair<Float, Float>>()
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -86,11 +86,8 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
         paint.color = Color.BLACK
         canvas.drawCircle(circleX, circleY, circleRadius, paint)
 
-        // Рисуем след (от прозрачного к яркому)
-        for ((x, y, alpha) in trail) {
-            paint.color = Color.argb(alpha, 255, 255, 255) // Белый с прозрачностью
-            canvas.drawCircle(x, y, ballRadius / 2, paint)
-        }
+        // Рисуем градиентный след
+        drawTrail(canvas)
 
         // Рисуем мяч как изображение
         canvas.drawBitmap(ballBitmap, ballX - ballRadius, ballY - ballRadius, paint)
@@ -101,6 +98,34 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
         canvas.drawText("FPS: $fps", 50f, 80f, paint)
 
         postInvalidateDelayed(2)
+    }
+
+    private fun drawTrail(canvas: Canvas) {
+        if (trail.size < 2) return
+
+        val gradientPaint = Paint().apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 20f
+            isAntiAlias = true
+        }
+
+        val path = Path()
+        path.moveTo(trail[0].first, trail[0].second)
+
+        for (i in 1 until trail.size) {
+            path.lineTo(trail[i].first, trail[i].second)
+        }
+
+        val gradient = LinearGradient(
+            trail.first().first, trail.first().second,
+            trail.last().first, trail.last().second,
+            Color.argb(255, 255, 255, 255), // Яркий белый в начале
+            Color.argb(0, 255, 255, 255), // Прозрачный в конце
+            Shader.TileMode.CLAMP
+        )
+
+        gradientPaint.shader = gradient
+        canvas.drawPath(path, gradientPaint)
     }
 
     private fun updatePhysics() {
@@ -116,32 +141,22 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
         val distance = sqrt((distX * distX + distY * distY).toDouble()).toFloat()
 
         if (distance + ballRadius >= circleRadius) {
-            // Нормализованный вектор от центра круга к шару
             val normX = distX / distance
             val normY = distY / distance
 
-            // Перемещаем шарик обратно на границу круга
             ballX = circleX + (circleRadius - ballRadius) * normX
             ballY = circleY + (circleRadius - ballRadius) * normY
 
-            // Отражение скорости относительно нормали
             val dotProduct = velocityX * normX + velocityY * normY
             velocityX -= 2 * dotProduct * normX
             velocityY -= 2 * dotProduct * normY
 
-            // Увеличиваем радиус круга
             circleRadius += 1
         }
 
         // Добавляем позицию в след (максимум 20 точек)
-        if (trail.size > 20) trail.removeAt(0) // Удаляем старый след
-        trail.add(Triple(ballX, ballY, 255)) // Новый след с максимальной прозрачностью
-
-        // Постепенно уменьшаем прозрачность у всех следов
-        for (i in trail.indices) {
-            val (x, y, alpha) = trail[i]
-            trail[i] = Triple(x, y, max(0, alpha - 12)) // Уменьшаем прозрачность
-        }
+        if (trail.size > 20) trail.removeAt(0)
+        trail.add(Pair(ballX, ballY))
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
