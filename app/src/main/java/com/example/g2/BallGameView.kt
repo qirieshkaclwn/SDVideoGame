@@ -1,11 +1,7 @@
 package com.example.g2
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
+import android.graphics.*
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -26,12 +22,17 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
     private var circleY = 0f
     private var circleRadius = 0f
     private var ballRadius = 0f
-    private var ballColor = Color.rgb(Random.nextInt(50, 255), Random.nextInt(50, 255), Random.nextInt(50, 255))
     private lateinit var backgroundBitmap: Bitmap
+    private lateinit var ballBitmap: Bitmap
     private var speed = 4f
     private val gravity = 0.1f
     private var accelX = 0f
     private var accelY = 0f
+    private var lastFrameTime = System.nanoTime()
+    private var fps = 0
+
+    // Список следов (позиция x, y, прозрачность)
+    private val trail = mutableListOf<Triple<Float, Float, Int>>()
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -39,7 +40,12 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
     init {
         paint.style = Paint.Style.FILL
         initializeGame()
+
+        // Загружаем фон и мяч
         backgroundBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.background)
+        val originalBallBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.bols)
+        ballBitmap = Bitmap.createScaledBitmap(originalBallBitmap, 80, 80, true) // Масштабируем мяч
+
         accelerometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
     }
 
@@ -50,8 +56,8 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
         circleX = screenWidth / 2
         circleY = screenHeight / 2
 
-        circleRadius = 26f
-        ballRadius = 20f
+        circleRadius = 100f
+        ballRadius = 40f
 
         val angle = Random.nextFloat() * 2 * PI.toFloat()
         val radius = Random.nextFloat() * (circleRadius - ballRadius)
@@ -64,16 +70,37 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+
+        // Рассчитываем FPS
+        val currentTime = System.nanoTime()
+        val deltaTime = (currentTime - lastFrameTime) / 1_000_000_000.0 // в секундах
+        lastFrameTime = currentTime
+        fps = (1 / deltaTime).toInt()
+
+        updatePhysics()
+
+        // Рисуем фон
         canvas.drawBitmap(backgroundBitmap, (width - backgroundBitmap.width) / 2f, (height - backgroundBitmap.height) / 2f, paint)
 
+        // Рисуем круг
         paint.color = Color.BLACK
         canvas.drawCircle(circleX, circleY, circleRadius, paint)
 
-        paint.color = ballColor
-        canvas.drawCircle(ballX, ballY, ballRadius, paint)
+        // Рисуем след (от прозрачного к яркому)
+        for ((x, y, alpha) in trail) {
+            paint.color = Color.argb(alpha, 255, 255, 255) // Белый с прозрачностью
+            canvas.drawCircle(x, y, ballRadius / 2, paint)
+        }
 
-        updatePhysics()
-        postInvalidateDelayed(1)
+        // Рисуем мяч как изображение
+        canvas.drawBitmap(ballBitmap, ballX - ballRadius, ballY - ballRadius, paint)
+
+        // Отображаем FPS
+        paint.color = Color.WHITE
+        paint.textSize = 50f
+        canvas.drawText("FPS: $fps", 50f, 80f, paint)
+
+        postInvalidateDelayed(2)
     }
 
     private fun updatePhysics() {
@@ -89,22 +116,39 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
         val distance = sqrt((distX * distX + distY * distY).toDouble()).toFloat()
 
         if (distance + ballRadius >= circleRadius) {
+            // Нормализованный вектор от центра круга к шару
             val normX = distX / distance
             val normY = distY / distance
+
+            // Перемещаем шарик обратно на границу круга
+            ballX = circleX + (circleRadius - ballRadius) * normX
+            ballY = circleY + (circleRadius - ballRadius) * normY
+
+            // Отражение скорости относительно нормали
             val dotProduct = velocityX * normX + velocityY * normY
             velocityX -= 2 * dotProduct * normX
             velocityY -= 2 * dotProduct * normY
 
-            ballColor = Color.rgb(Random.nextInt(50, 255), Random.nextInt(50, 255), Random.nextInt(50, 255))
+            // Увеличиваем радиус круга
             circleRadius += 1
+        }
+
+        // Добавляем позицию в след (максимум 20 точек)
+        if (trail.size > 20) trail.removeAt(0) // Удаляем старый след
+        trail.add(Triple(ballX, ballY, 255)) // Новый след с максимальной прозрачностью
+
+        // Постепенно уменьшаем прозрачность у всех следов
+        for (i in trail.indices) {
+            val (x, y, alpha) = trail[i]
+            trail[i] = Triple(x, y, max(0, alpha - 12)) // Уменьшаем прозрачность
         }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         event?.let {
             if (it.sensor.type == Sensor.TYPE_ACCELEROMETER) {
-                accelX = -it.values[0] / 10
-                accelY = it.values[1] / 10
+                accelX = -it.values[0]
+                accelY = it.values[1]
             }
         }
     }
@@ -113,6 +157,7 @@ class BallGameView(context: Context, attrs: AttributeSet?) : View(context, attrs
 
     fun resetGame() {
         initializeGame()
+        trail.clear() // Очистка следа при перезапуске
         invalidate()
     }
 

@@ -12,9 +12,6 @@
         android:layout_height="match_parent" />
 
 
-    <!-- Кнопка перезапуска -->
-
-    <!-- Кнопка выключения музыки -->
     <Button
         android:id="@+id/restartButton"
         android:layout_width="wrap_content"
